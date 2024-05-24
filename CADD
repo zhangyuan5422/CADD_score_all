@@ -1,0 +1,94 @@
+#CADD
+https://datasetgnomad.blob.core.windows.net/dataset/release/3.1.2/vcf/genomes/gnomad.genomes.v3.1.2.sites.chr1.vcf.bgz.tbi
+https://datasetgnomad.blob.core.windows.net/dataset/release/3.0.1/coverage/genomes/gnomad.genomes.r3.0.1.coverage.summary.tsv.bgz
+
+conda install -c bioconda snakemake
+conda install -c conda-forge mamba
+https://github.com/zhangyuan5422/CADD-scripts
+
+https://krishna.gs.washington.edu/download/CADD/v1.6/GRCh38/annotationsGRCh38_v1.6.tar.gz
+https://krishna.gs.washington.edu/download/CADD/v1.6/GRCh38/whole_genome_SNVs.tsv.gz
+https://krishna.gs.washington.edu/download/CADD/v1.6/GRCh38/whole_genome_SNVs_inclAnno.tsv.gz
+https://krishna.gs.washington.edu/download/CADD/v1.6/GRCh38/gnomad.genomes.r3.0.indel.tsv.gz
+https://krishna.gs.washington.edu/download/CADD/v1.6/GRCh38/gnomad.genomes.r3.0.indel_inclAnno.tsv.gz
+
+https://krishna.gs.washington.edu/download/CADD/v1.6/GRCh38/whole_genome_SNVs.tsv.gz
+https://krishna.gs.washington.edu/download/CADD/v1.6/GRCh38/whole_genome_SNVs_inclAnno.tsv.gz
+https://krishna.gs.washington.edu/download/CADD/v1.6/GRCh38/gnomad.genomes.r3.0.indel.tsv.gz
+https://krishna.gs.washington.edu/download/CADD/v1.6/GRCh38/gnomad.genomes.r3.0.indel_inclAnno.tsv.gz
+
+
+
+#conda channel
+conda config --show channel_priority
+conda config --set channel_priority strict
+conda config --set channel_priority flexible
+
+#Run CADD
+conda activate rare_variant
+/home/zhangy15/projects/rare_variant/CADD/CADD-scripts-1.6.post1/CADD.sh denovo_variants_no_HLA_MUC.cadd.vcf (chr[without chr],pos,id,ref,alt)
+
+
+
+#read ped file
+cat chr22.ped|cut -f 1-8 -d ' '|less
+
+#plink --vcf --recode
+plink --vcf myanno.chrY.coding.variant.normalized.final.filter.hg38_multianno.vcf.gz --make-bed --recodeA --out tempa
+
+zcat /home/zhangy15/projects/SPARK_rare_mutation/SPARK_data/variant_annotation/multiple_sample/myanno.chr2.coding.variant.normalized.final.hg38_multianno.vcf.gz|grep 'gnomad\|gnomAD'|l
+
+zcat  /home/zhangy15/projects/SPARK_rare_mutation/SPARK_data/variant_annotation/multiple_sample/myanno.chr2.coding.variant.normalized.final.hg38_multianno.vcf.gz|grep gnomad|less
+
+#!/bin/bash
+
+#SBATCH --time=6:00:00
+#SBATCH -c 1
+#SBATCH --mem=4G
+#SBATCH --array=1-24
+
+c=$(sed -n "$SLURM_ARRAY_TASK_ID"p list_of_chromosomes)
+
+zcat /home/zhangy15/projects/SPARK_rare_mutation/SPARK_data/variant_annotation/multiple_sample/myanno.chr$c.coding.variant.normalized.final.hg38_multianno.vcf.gz|sed '/^##INFO=<ID=gnomad312/ s/Type=String/Type=Float/'|bcftools view -i 'INFO/gnomad312_AF=="." || INFO/gnomad312_AF<=0.01'| bgzip > /home/zhangy15/projects/SPARK_rare_mutation/SPARK_data/variant_annotation/multiple_sample/myanno.chr$c.coding.variant.normalized.final.hg38_multianno.filter.vcf.gz
+
+
+import pandas as pd
+cpos=pd.read_csv('cadd_pos', header=None)
+pre_cpos=pd.read_csv('pre_cadd_pos', header=None)
+set_cpos=set(cpos[0])
+set_pre_cpos=set(pre_cpos[0])
+len(set_cpos)
+len(cpos)
+set_cpos-set_pre_cpos
+set_pre_cpos-set_cpos
+
+
+zcat tmp.tsv.gz |grep 658141
+bcftools norm -m - test.vcf.gz |bcftools norm -d exact|rtg vcfdecompose -i - -o test.decomp.vcf.gz
+
+##check the sample size
+#The number of patient samples in a VCF file can be determined by examining the #CHROM header line, which lists all the sample IDs. Each #patient/sample is represented by a column in the VCF file starting from the 10th column.
+zgrep '^#CHROM' yourfile.vcf.gz | cut -f 10- | tr '\t' '\n' | wc -l
+
+
+
+https://krishna.gs.washington.edu/download/CADD/v1.6/GRCh38/whole_genome_SNVs.tsv.gz
+https://krishna.gs.washington.edu/download/CADD/v1.6/GRCh38/whole_genome_SNVs_inclAnno.tsv.gz
+https://krishna.gs.washington.edu/download/CADD/v1.6/GRCh38/gnomad.genomes.r3.0.indel.tsv.gz
+https://krishna.gs.washington.edu/download/CADD/v1.6/GRCh38/gnomad.genomes.r3.0.indel_inclAnno.tsv.gz
+
+
+#CADD
+###1-generating the input vcf file to do CADD analysis (useing bcftools view -H & remove chr)
+bcftools view wgs.coding.low_freq.SIFT_score.vcf.gz -H|cut -f 1-5|awk '{gsub(/^chr/,""); print}' > wgs.coding.low_freq.CADD_input
+
+###2-rung the CADD analysis and extract the CADD score data without head (note:conda activate rare_variant)
+/home/zhangy15/projects/rare_variant/CADD/CADD-scripts-1.6.post1/CADD.sh ../multiple_sample/norm_CADD/chr$c.CADD_input.vcf
+zcat ../multiple_sample/norm_CADD/chr$c.CADD_input.tsv.gz|tail -n +3|awk '{print "chr"$0}' > ../multiple_sample/norm_CADD/CADD.chr$c.tsv.gz
+
+###3-generate the CADD_score 
+for c in {1..22} X Y; do printf 'ID\tscore\n' > ../variant_tables/chr$c.CADD_scores.tsv; cat  CADD.chr$c.tsv.gz|awk '{combined=$1 "_" $2 "_" $3 "_" $4; print combined "\t" $6 }'>>../variant_tables/chr$c.CADD_scores.tsv;echo "$c done";done
+
+
+
+
